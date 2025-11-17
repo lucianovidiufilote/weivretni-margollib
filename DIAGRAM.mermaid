@@ -1,0 +1,63 @@
+```mermaid
+flowchart TB
+
+%% ============================
+%% Legend
+%% ============================
+subgraph Legend[Legend]
+    L1[Service]
+    L2[/Message/]
+    L3{{Query}}
+    L4[Service to implement]
+end
+
+%% ============================
+%% Nodes outside processing box
+%% ============================
+Parsing[/Data parsing/]
+Reporting[Reporting]
+Notification[Notification]
+Alerting[Alerting]
+
+%% ============================
+%% Processing box
+%% ============================
+subgraph ProcessingBox[" "]
+    direction TB
+
+    DataRecord[/Data record/]
+    Aggregation{{Aggregation}}
+    DataProcessing[Data processing]
+    RecordStored[/Record stored/]
+    HighValue[/High value/]
+
+end
+
+%% ============================
+%% Flow inside processing box
+%% ============================
+DataRecord -->|1| DataProcessing
+Aggregation -->|2| DataProcessing
+DataProcessing -->|3| RecordStored
+DataProcessing -->|4| HighValue
+
+%% ============================
+%% External connections
+%% ============================
+Parsing --> DataRecord
+Parsing --> Aggregation
+Reporting --> Aggregation
+
+RecordStored --> Notification
+HighValue --> Alerting
+
+%% ============================
+%% Shapes (to match image)
+%% ============================
+classDef service fill:#ffffff,stroke:#000,stroke-width:1,rx:5,ry:5;
+classDef message fill:#ffffff,stroke:#000,stroke-width:1;
+classDef query fill:#ffffff,stroke:#000,stroke-width:1;
+
+class L1,Parsing,Reporting,Notification,Alerting,DataProcessing,ProcessingBox,L4 service;
+class L2,DataRecord,RecordStored,HighValue message;
+class L3,Aggregation query;
