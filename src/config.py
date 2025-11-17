@@ -1,6 +1,7 @@
 """Application configuration."""
 from __future__ import annotations
 
+from decimal import Decimal
 from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,6 +25,10 @@ class Settings(BaseSettings):
 
     worker_queue: str = Field("app:jobs", validation_alias="WORKER_QUEUE")
     worker_poll_interval: float = Field(2.0, validation_alias="WORKER_POLL_INTERVAL")
+    notification_channel: str = Field("notifications", validation_alias="NOTIFICATION_CHANNEL")
+    alert_channel: str = Field("alerts", validation_alias="ALERT_CHANNEL")
+    alert_threshold: Decimal = Field(Decimal("1000"), validation_alias="ALERT_THRESHOLD")
+    aggregation_cooldown_seconds: int = Field(60, validation_alias="AGGREGATION_COOLDOWN_SECONDS")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

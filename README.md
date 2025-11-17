@@ -44,6 +44,7 @@ The repository also contains a runnable skeleton for a REST API that exposes a s
 - **FastAPI** application server exposed through Uvicorn.
 - **PostgreSQL** and **Redis** services provisioned in Docker Compose.
 - **RQ**-based worker process backed by Redis for asynchronous tasks.
+- **Aggregation worker** that refreshes destination summaries every minute so notification and reporting consumers get near-real-time totals without touching the API path.
 
 ### Run locally
 
@@ -67,7 +68,7 @@ The API becomes available at http://localhost:8000/health once the containers ha
 Enqueue the bundled demo RQ job from the API container to see the worker execute application code:
 
 ```bash
-docker compose exec api python -m app.devtools.enqueue_demo
+docker compose exec api python -m src.devtools.enqueue_demo
 ```
 
 ### Hot reload during development
@@ -78,10 +79,47 @@ Use the dedicated dev compose file to bind-mount the source tree and enable auto
 docker compose -f docker-compose.dev.yaml up --build
 ```
 
-The dev file defines the same four services (API, worker, Postgres, Redis) as the production compose file but swaps in bind mounts and reload-friendly commands. Any changes to the `app/` directory now trigger FastAPI reloads and restart the worker automatically via `python -m watchfiles --filter python app -- python -m app.worker`.
+The dev file defines the same four services (API, worker, Postgres, Redis) as the production compose file but swaps in bind mounts and reload-friendly commands. Any changes to the `src/` directory now trigger FastAPI reloads and restart the worker automatically via `python -m watchfiles --filter python src -- python -m src.worker`.
+
+### Periodic aggregation worker
+
+An auxiliary RQ job (`src.services.aggregation_scheduler.recompute_destination_summaries`) rebuilds destination-level summaries. Every successful record ingestion signals this job, but Redis enforces a configurable cooldown (`AGGREGATION_COOLDOWN_SECONDS`) so recomputes happen at most once per interval regardless of traffic bursts. This keeps the ingestion worker responsive while still providing near-real-time snapshots for APIs and downstream notifications.
+
+## Business endpoints
+
+### Submit a record
+
+The API accepts normalized records via `POST /records` and immediately enqueues them for background processing (idempotent insert, aggregation, and notifications):
+
+```bash
+curl -X POST http://localhost:8000/records \
+  -H "Content-Type: application/json" \
+  -d '{
+    "recordId": "rec-001",
+    "time": "2024-03-01T12:00:00Z",
+    "sourceId": "source-a",
+    "destinationId": "dest-123",
+    "type": "positive",
+    "value": 125.50,
+    "unit": "SEK",
+    "reference": "invoice-9"
+  }'
+```
+
+### Query aggregations
+
+Use `GET /records/aggregations` with optional `startTime`, `endTime`, and `type` filters to retrieve the matching records grouped by destination along with each group's running total (positive records add to the total while negative records subtract). Example:
+
+```bash
+curl "http://localhost:8000/records/aggregations?startTime=2024-03-01T00:00:00Z&type=positive"
+```
+
+### Notifications and alerts
+
+Every processed record emits a notification message (record + the latest cached summary for the same destination/reference) on the `NOTIFICATION_CHANNEL`. The cached summary is refreshed asynchronously by the aggregation worker discussed above, so downstream consumers receive near-real-time totals without impacting ingestion latency. When a single record's `value` is above the configurable `ALERT_THRESHOLD`, the service also publishes an alert on `ALERT_CHANNEL`. Both channels are backed by Redis `PUBLISH` so downstream services can subscribe without coupling to the API.
 
 ### Next steps
 
-- Add new FastAPI routers for the business endpoints described above.
-- Use the provided PostgreSQL instance for persistence (SQLModel/SQLAlchemy are good fits).
-- Move long-running tasks or notifications into the provided worker loop.
+- Harden the storage layer with migrations and data retention policies.
+- Expand automated tests (unit + integration) that cover the worker pipeline and aggregation endpoint.
+- Integrate real downstream consumers for the Redis notification/alert channels or adapt them to your messaging system of choice.

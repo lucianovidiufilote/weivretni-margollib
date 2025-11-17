@@ -7,7 +7,7 @@ from typing import Any, Dict
 import asyncpg
 import redis.asyncio as aioredis
 
-from app.config import get_settings
+from src.config import get_settings
 
 
 async def postgres_health() -> Dict[str, Any]:
