@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import get_settings
 from src.db import get_session
 from src.models import RecordType
-from src.repositories.aggregations import fetch_aggregations
+from src.services.aggregations import fetch_aggregations
 from src.schemas import AggregationGroup, RecordAcceptedResponse, RecordPayload
 from src.services.kafka import get_or_create_producer
 

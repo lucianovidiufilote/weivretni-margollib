@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from typing import Awaitable, Callable
 
 from aiokafka import AIOKafkaProducer
 
@@ -48,9 +49,18 @@ async def run_dispatcher() -> None:
         await producer.stop()
 
 
+async def worker_loop(handler: Callable[[], Awaitable[None]], name: str) -> None:
+    while True:
+        try:
+            await handler()
+        except Exception:  # pragma: no cover - diagnostics
+            logger.exception("%s encountered an error", name)
+            await asyncio.sleep(1)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s %(name)s %(message)s")
-    asyncio.run(run_dispatcher())
+    asyncio.run(worker_loop(run_dispatcher, "outbox-dispatcher"))
 
 
 if __name__ == "__main__":
