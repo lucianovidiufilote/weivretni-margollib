@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from datetime import datetime
 from decimal import Decimal
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -16,26 +14,8 @@ from src.db import async_session_factory
 from src.models import DestinationSummary, Record
 from src.notifications import publish_alert, publish_notification
 from src.services.aggregation_scheduler import request_aggregation_run
-from src.schemas import RecordPayload
-
-
-@dataclass(slots=True)
-class SummarySnapshot:
-    destination_id: str
-    reference: str
-    total_value: Decimal
-    record_count: int
-    last_record_time: Optional[datetime]
-
-
-@dataclass(slots=True)
-class ProcessResult:
-    duplicate: bool
-    summary: SummarySnapshot | None = None
-
-
-def _as_decimal(value: Decimal | float | int) -> Decimal:
-    return Decimal(str(value))
+from src.schemas import ProcessResult, RecordPayload, SummarySnapshot
+from src.utils import _as_decimal
 
 
 async def _insert_record(session: AsyncSession, payload: RecordPayload) -> bool:

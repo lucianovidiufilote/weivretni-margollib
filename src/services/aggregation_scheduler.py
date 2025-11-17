@@ -3,8 +3,6 @@ from __future__ import annotations
 
 
 import logging
-
-from redis import Redis
 from rq import Retry
 
 from src.config import get_settings
@@ -14,15 +12,12 @@ LOCK_KEY = "aggregation:cooldown"
 logger = logging.getLogger(__name__)
 
 
-def _get_redis() -> Redis:
-    return get_redis_connection()
-
 
 def request_aggregation_run() -> bool:
     """Enqueue the aggregation job if the cooldown allows it."""
 
     settings = get_settings()
-    conn = _get_redis()
+    conn = get_redis_connection()
     acquired = conn.set(LOCK_KEY, "1", nx=True, ex=settings.aggregation_cooldown_seconds)
     if acquired:
         queue = get_worker_queue()
