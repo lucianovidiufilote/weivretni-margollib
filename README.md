@@ -23,16 +23,16 @@
     - [Observe notifications/alerts](#observe-notificationsalerts)
   - [Reliability Guarantees](#reliability-guarantees)
   - [Next Steps](#next-steps)
-- [Load Test Harness](#load-test-harness)
+- [Load testing](#load-testing)
 
 # Specs
 
-# Interview assignment - Data processing 
+## Interview assignment - Data processing 
 Design a micro service that processes standardized data records from multiple sources, supports aggregation and querying functions and feeds downstream services with relevant information. 
-## Instructions 
+### Instructions 
 The intended time for this assignment is a maximum of 2 hours. Document your solution in any way you are comfortable with, but be prepared to present it during the interview. The implementation can be in any programming language or even pseudo code. During the interview you will be asked to walk us through it. 
 You may choose any tech stack to support the service. Consider quality, scalability and performance. Document the choices and assumptions you make in your design and why. 
-## Requirements 
+### Requirements 
 1. Consume input from several services. The service should handle about 100,000 messages per hour efficiently. Implement idempotency to prevent duplicate processing, ensuring each record is processed exactly once. The data structure for incoming records is as follows: 
 ```json 
 { 
@@ -54,7 +54,7 @@ following.
 3. Emit messages to be consumed by the notification service. There should be one message for every record processed. Each message should contain the processed record and a summary of any previous ones for the same destination id and reference. 
 4. Emit messages to be consumed by alerting service when a record’s value is above a configurable threshold. 
 
-## Service overview 
+### Service overview 
 Below diagram shows the intended place for the transactions service in the larger system.
 
 ```mermaid
@@ -123,7 +123,7 @@ class L3,Aggregation query;
 ```
 
 # Plan
-# General idea
+## General idea
 Design a micro service that processes standardized data records from multiple sources, supports aggregation and querying functions and feeds downstream services with relevant information. 
 
 ## Assumptions
@@ -142,15 +142,8 @@ Design a micro service that processes standardized data records from multiple so
 2. **Notifications/alerts**: Outbox dispatcher publishes to Kafka topics (`notifications`, `alerts`) exactly once.
 3. **Query**: FastAPI aggregations endpoint reads directly from `records` with optional time/type filters and groups by destinationId, returning both the records and the per-destination total.
 
-## Pending work
-- Logging/metrics for workers.
-- Automated tests for ingestion/outbox logic.
-
-
 
 # Implementation
-# Implementation Guide
-
 This document explains the entire service: how to run it, how data flows through the system, and what each component does.
 
 ## Architecture at a Glance
@@ -250,13 +243,12 @@ docker compose exec kafka kafka-console-consumer \
   --from-beginning
 ```
 
-## Reliability Guarantees
+### Reliability Guarantees
 
 - **Idempotency**: `record_id` is the primary key, so duplicates are ignored.
 - **Atomicity**: record insert, aggregate update, and outbox writes happen in one transaction.
 - **Outbox pattern**: notifications and alerts are only published after they are safely stored; if Kafka is down, rows accumulate in the outbox and publish once the dispatcher catches up.
 - **Back-pressure**: the outbox table acts as the buffer, preventing record loss if Kafka is unavailable.
-
 
 #### ACID + Kafka + Outbox = Exactly-once Effects
 - Kafka → at-least-once delivery    
@@ -267,7 +259,7 @@ docker compose exec kafka kafka-console-consumer \
 - Outbox worker → no missed notifications/alerts
 
 
-## Load testing 
+## Load testing
 RATE=28 DURATION=3600 CONNECTIONS=50 node loadtest/test.js
 
 ## Next Steps
