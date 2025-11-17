@@ -16,7 +16,3 @@ def _serialize(value: Any) -> str:
     if isinstance(value, Decimal):
         return format(value, "f")
     raise TypeError(f"Unsupported type {type(value)}")
-
-
-def _as_decimal(value: Decimal | float | int) -> Decimal:
-    return Decimal(str(value))

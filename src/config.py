@@ -19,16 +19,15 @@ class Settings(BaseSettings):
     database_password: str = Field("app", validation_alias="DATABASE_PASSWORD")
     database_name: str = Field("app", validation_alias="DATABASE_NAME")
 
-    redis_host: str = Field("redis", validation_alias="REDIS_HOST")
-    redis_port: int = Field(6379, validation_alias="REDIS_PORT")
-    redis_db: int = Field(0, validation_alias="REDIS_DB")
+    kafka_bootstrap_servers: str = Field("kafka:9092", validation_alias="KAFKA_BOOTSTRAP_SERVERS")
+    records_topic: str = Field("records.in", validation_alias="RECORDS_TOPIC")
+    notifications_topic: str = Field("notifications", validation_alias="NOTIFICATIONS_TOPIC")
+    alerts_topic: str = Field("alerts", validation_alias="ALERTS_TOPIC")
 
-    worker_queue: str = Field("app:jobs", validation_alias="WORKER_QUEUE")
-    worker_poll_interval: float = Field(2.0, validation_alias="WORKER_POLL_INTERVAL")
-    notification_channel: str = Field("notifications", validation_alias="NOTIFICATION_CHANNEL")
-    alert_channel: str = Field("alerts", validation_alias="ALERT_CHANNEL")
-    alert_threshold: Decimal = Field(Decimal("1000"), validation_alias="ALERT_THRESHOLD")
-    aggregation_cooldown_seconds: int = Field(60, validation_alias="AGGREGATION_COOLDOWN_SECONDS")
+    outbox_batch_size: int = Field(100, validation_alias="OUTBOX_BATCH_SIZE")
+    outbox_poll_interval: float = Field(0.5, validation_alias="OUTBOX_POLL_INTERVAL")
+
+    default_alert_threshold: Decimal = Field(Decimal("1000"), validation_alias="DEFAULT_ALERT_THRESHOLD")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -38,10 +37,6 @@ class Settings(BaseSettings):
             f"postgresql+asyncpg://{self.database_user}:{self.database_password}"
             f"@{self.database_host}:{self.database_port}/{self.database_name}"
         )
-
-    @property
-    def redis_url(self) -> str:
-        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
 
 @lru_cache

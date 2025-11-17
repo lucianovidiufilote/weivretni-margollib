@@ -68,16 +68,9 @@ class AggregationGroup(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
-class SummarySnapshot(BaseModel):
-    destination_id: str = Field(..., alias="destinationId")
-    reference: str
-    total_value: Decimal = Field(..., alias="totalValue")
-    record_count: int = Field(..., alias="recordCount")
-    last_record_time: datetime | None = Field(None, alias="lastRecordTime")
-
-    model_config = ConfigDict(populate_by_name=True)
-
-
-class ProcessResult(BaseModel):
-    duplicate: bool
-    summary: SummarySnapshot | None = None
+__all__ = [
+    "RecordPayload",
+    "RecordAcceptedResponse",
+    "RecordDTO",
+    "AggregationGroup",
+]

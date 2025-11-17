@@ -4,8 +4,10 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum as SAEnum, Numeric, String, UniqueConstraint, func
+from sqlalchemy import DateTime, Enum as SAEnum, Numeric, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db import Base
@@ -17,31 +19,46 @@ class RecordType(str, Enum):
 
 
 class Record(Base):
-    """Individual data record ingested by the service."""
-
     __tablename__ = "records"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    record_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    event_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    source_id: Mapped[str] = mapped_column(String(64))
-    destination_id: Mapped[str] = mapped_column(String(64), index=True)
-    record_type: Mapped[RecordType] = mapped_column(SAEnum(RecordType, name="record_type"))
-    value: Mapped[Decimal] = mapped_column(Numeric(18, 4))
-    unit: Mapped[str] = mapped_column(String(16))
-    reference: Mapped[str] = mapped_column(String(64))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    record_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    destination_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    type: Mapped[RecordType] = mapped_column(SAEnum(RecordType, name="record_type"), nullable=False)
+    value: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    unit: Mapped[str] = mapped_column(String(16), nullable=False)
+    reference: Mapped[str] = mapped_column(String(64), nullable=False)
+    processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
-class DestinationSummary(Base):
-    """Running aggregate per destination and reference."""
+class Aggregate(Base):
+    __tablename__ = "aggregates"
 
-    __tablename__ = "destination_summaries"
-    __table_args__ = (UniqueConstraint("destination_id", "reference", name="uq_destination_reference"),)
+    destination_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    reference: Mapped[str] = mapped_column(String(64), primary_key=True)
+    total_value: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    record_count: Mapped[int] = mapped_column(nullable=False)
+    last_record_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    last_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    destination_id: Mapped[str] = mapped_column(String(64), index=True)
-    reference: Mapped[str] = mapped_column(String(64))
-    total_value: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=0)
-    record_count: Mapped[int] = mapped_column(default=0)
-    last_record_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+class Threshold(Base):
+    __tablename__ = "thresholds"
+
+    destination_id: Mapped[str | None] = mapped_column(String(64), primary_key=True)
+    reference: Mapped[str | None] = mapped_column(String(64), primary_key=True)
+    unit: Mapped[str] = mapped_column(String(16), primary_key=True)
+    threshold: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+
+
+class OutboxEvent(Base):
+    __tablename__ = "outbox"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    destination: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retries: Mapped[int] = mapped_column(nullable=False, default=0)

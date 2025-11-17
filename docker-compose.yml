@@ -1,48 +1,6 @@
 version: "3.9"
 
 services:
-  api:
-    build: .
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000
-    environment:
-      API_HOST: 0.0.0.0
-      API_PORT: 8000
-      DATABASE_HOST: db
-      DATABASE_PORT: 5432
-      DATABASE_USER: app
-      DATABASE_PASSWORD: app
-      DATABASE_NAME: app
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_DB: 0
-      WORKER_QUEUE: app:jobs
-      WORKER_POLL_INTERVAL: 2
-    ports:
-      - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
-
-  worker:
-    build: .
-    command: python -m src.worker
-    environment:
-      DATABASE_HOST: db
-      DATABASE_PORT: 5432
-      DATABASE_USER: app
-      DATABASE_PASSWORD: app
-      DATABASE_NAME: app
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_DB: 0
-      WORKER_QUEUE: app:jobs
-      WORKER_POLL_INTERVAL: 2
-    depends_on:
-      - redis
-      - db
-
   db:
     image: postgres:16
     environment:
@@ -59,13 +17,79 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.3
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.3
+    hostname: kafka
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+
+  api:
+    build: .
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_USER: app
+      DATABASE_PASSWORD: app
+      DATABASE_NAME: app
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+  ingestion-worker:
+    build: .
+    command: python -m src.workers.ingestion
+    environment:
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_USER: app
+      DATABASE_PASSWORD: app
+      DATABASE_NAME: app
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+  outbox-worker:
+    build: .
+    command: python -m src.workers.outbox_dispatcher
+    environment:
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_USER: app
+      DATABASE_PASSWORD: app
+      DATABASE_NAME: app
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
 
 volumes:
   pg_data:
-  redis_data:

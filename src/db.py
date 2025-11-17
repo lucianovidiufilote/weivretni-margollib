@@ -19,7 +19,7 @@ _NAMING_CONVENTION = {
 
 
 class Base(AsyncAttrs, DeclarativeBase):
-    """Declarative base that enables async ORM helpers."""
+    """Declarative base for SQLAlchemy models."""
 
     metadata = MetaData(naming_convention=_NAMING_CONVENTION)
 
@@ -30,14 +30,12 @@ async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
-    """FastAPI dependency for acquiring an async session."""
-
     async with async_session_factory() as session:
         yield session
 
 
 async def init_models() -> None:
-    """Create database tables if they do not exist."""
+    from src import models  # noqa: F401 ensure models imported
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
