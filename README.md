@@ -1,3 +1,30 @@
+**Table of Contents**
+
+- [Specs](#specs)
+  - [Instructions](#instructions)
+  - [Requirements](#requirements)
+- [Service overview](#service-overview)
+- [Plan](#plan)
+  - [General idea](#general-idea)
+  - [Assumptions](#assumptions)
+  - [Performance requirements](#performance-requirements)
+  - [Integrity and robustness requirements](#integrity-and-robustness-requirements)
+  - [Functional stages](#functional-stages)
+  - [Test plan](#test-plan)
+- [Implementation Guide](#implementation-guide)
+  - [Architecture at a Glance](#architecture-at-a-glance)
+  - [Components](#components)
+  - [Runtime Workflow](#runtime-workflow)
+  - [Quick Start](#quick-start)
+    - [Development mode](#development-mode)
+  - [Example Usage](#example-usage)
+    - [Submit a record](#submit-a-record)
+    - [Query aggregations](#query-aggregations)
+    - [Observe notifications/alerts](#observe-notificationsalerts)
+  - [Reliability Guarantees](#reliability-guarantees)
+  - [Next Steps](#next-steps)
+- [Load Test Harness](#load-test-harness)
+
 # Specs
 
 # Interview assignment - Data processing 
@@ -183,14 +210,6 @@ Services exposed:
 | API | http://localhost:8000/health |
 | Kafka broker | kafka:9092 (inside the network) |
 | PostgreSQL | localhost:5432 |
-
-### Development mode
-
-```bash
-docker compose -f docker-compose.dev.yaml up --build
-```
-
-The dev compose file bind-mounts the repository and enables auto-reload for the API; workers also run from source so edits apply immediately.
 
 ## Example Usage
 
