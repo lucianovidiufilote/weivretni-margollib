@@ -114,7 +114,20 @@ docker compose exec kafka kafka-console-consumer \
 - **Outbox pattern**: notifications and alerts are only published after they are safely stored; if Kafka is down, rows accumulate in the outbox and publish once the dispatcher catches up.
 - **Back-pressure**: the outbox table acts as the buffer, preventing record loss if Kafka is unavailable.
 
+
+#### ACID + Kafka + Outbox = Exactly-once Effects
+- Kafka → at-least-once delivery    
+- Outbox + ACID → exactly-once side effects    
+- Idempotent insert (recordId PK) → no duplicates    
+- Atomic transaction → no partial updates    
+- Durability → no lost events    
+- Outbox worker → no missed notifications/alerts
+
+
+## Load testing 
+RATE=28 DURATION=3600 CONNECTIONS=50 node loadtest/test.js
+
 ## Next Steps
 
 - Add schema migrations
-- Add stress/load test
+- Add unit/functional/integration tests
