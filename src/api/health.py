@@ -1,13 +1,14 @@
-"""Record ingestion and query API."""
+"""Health endpoint."""
 from __future__ import annotations
 
 from fastapi import APIRouter
 
 from src.services.health import combined_health
 
-router = APIRouter(prefix="/health", tags=["records"])
+router = APIRouter()
 
-@router.get("/", summary="Service health check")
+
+@router.get("/health", summary="Service health check")
 async def health() -> dict[str, object]:
     """Return aggregated component health information."""
 
