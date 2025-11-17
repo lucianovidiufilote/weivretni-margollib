@@ -1,64 +1,120 @@
-# Design Summary
+# Implementation Guide
+
+This document explains the entire service: how to run it, how data flows through the system, and what each component does.
+
+## Architecture at a Glance
+
+```mermaid
+flowchart LR
+    Client(("Client / POST /records")) -->|JSON payload| API[FastAPI]
+    API -->|produce| Kafka[(Kafka topic<br/>records.in)]
+    Kafka -->|consume| Ingestion[Ingestion Worker]
+    Ingestion -->|INSERT + UPSERT| Postgres[(PostgreSQL)]
+    Ingestion -->|write events| Outbox[(outbox table)]
+    Outbox -->|poll| Dispatcher[Outbox Worker]
+    Dispatcher -->|publish| Notifications[(Kafka topic notifications)]
+    Dispatcher -->|publish| Alerts[(Kafka topic alerts)]
+    API -->|GET /records/aggregations| Postgres
+```
 
 ## Components
 
 | Component | Responsibility |
 |-----------|----------------|
-| **FastAPI** (`src/main.py`, `src/api/records.py`) | Validates incoming records and pushes them to the Kafka topic `records.in`. Serves the aggregation endpoint directly from PostgreSQL. |
-| **PostgreSQL** | Stores raw records, per-destination aggregates, and the outbox table used for reliable messaging. Schema is defined in `db/init.sql`. |
-| **Kafka** | Transports records in, and broadcasts notification/alert events out. |
-| **Ingestion worker** (`src/workers/ingestion.py`) | Consumes `records.in`, writes records and aggregates inside a single DB transaction, and emits notification/alert rows into the `outbox` table (outbox pattern). |
-| **Outbox worker** (`src/workers/outbox_dispatcher.py`) | Polls the `outbox` table using `FOR UPDATE SKIP LOCKED`, publishes each payload to Kafka, and marks rows as published. |
+| **FastAPI (`src/main.py`, `src/api/records.py`)** | Validates incoming records and sends them to Kafka (`records.in`). Exposes `/records/aggregations`, which queries PostgreSQL directly. |
+| **PostgreSQL** | Stores raw records, per-destination aggregates, and the outbox table used for reliable messaging. Tables are created at startup via SQLAlchemy metadata. |
+| **Kafka** | Acts as the ingestion bus (`records.in`) and the broadcast layer for downstream consumers (`notifications`, `alerts`). |
+| **Ingestion worker (`src/workers/ingestion.py`)** | Consumes `records.in`, inserts the record idempotently, upserts the aggregate row, and writes notification/alert payloads into the outbox table in the same transaction. |
+| **Outbox worker (`src/workers/outbox_dispatcher.py`)** | Polls the outbox table with `FOR UPDATE SKIP LOCKED`, publishes each payload to Kafka, and marks rows as published. |
 
-## Data flow
+## Runtime Workflow
 
-1. Client POSTs `/records`.
-2. API validates the payload and pushes it to Kafka (`records.in`). Response is immediate (`202`).
-3. The ingestion worker:
-   - Inserts the record (`ON CONFLICT DO NOTHING` handles idempotency).
-   - Upserts the `(destinationId, reference)` aggregate (running total + count).
-   - Stores a notification payload in `outbox` (`type=notification`, destination=`notifications`).
-   - Optionally stores an alert payload in `outbox` if the record value passes the configured threshold.
-4. The outbox worker publishes those rows to Kafka (`notifications` / `alerts`) and stamps `published_at`.
-5. `/records/aggregations` queries `records` with optional `startTime`, `endTime`, and `type` filters, grouping by `destinationId`.
+1. **Submit a record**  
+   Clients call `POST /records` with a normalized payload. The API validates it and immediately produces the message to Kafka (`records.in`), responding with `202 Accepted`.
 
-## Schema
+2. **Process and persist**  
+   The ingestion worker consumes from `records.in`:
+   - Inserts the record (`ON CONFLICT DO NOTHING` provides idempotency).
+   - Upserts the `(destinationId, reference)` aggregate with the signed value.
+   - Emits a notification payload (`{"record": ..., "summary": ...}`) into the outbox table.
+   - Emits an alert payload if the record’s `value` exceeds `DEFAULT_ALERT_THRESHOLD`.
 
-Defined once in `db/init.sql`. Core tables:
+3. **Publish notifications**  
+   The outbox worker drains rows from the outbox table, publishes them to Kafka (`notifications`, `alerts`), and stamps `published_at`. This guarantees “exactly one message per processed record.”
 
-```
-records(record_id PK, time, source_id, destination_id, type, value, unit, reference, processed_at)
-aggregates(destination_id PK, reference PK, total_value, record_count, last_record_id, last_time)
-thresholds(destination_id, reference, unit, threshold)           -- optional future overrides
-outbox(id UUID PK, event_type, destination, payload JSONB, created_at, published_at, retries)
-```
+4. **Query aggregations**  
+   `GET /records/aggregations` accepts optional `startTime`, `endTime`, and `type` filters. The repository in `src/repositories/aggregations.py` runs a single SQL statement that groups by `destinationId`, returns all matching records, and includes the running total per destination.
 
-Indexes support the aggregation filters (`time`, `destination_id`, `type`).
+## Quick Start
 
-## Reliability
-
-- **Idempotency**: enforced by `records.record_id` primary key.
-- **Atomicity**: record insert, aggregate update, and outbox inserts run in a single transaction.
-- **Outbox pattern**: guarantees we never notify without having written the record, and Kafka publishes exactly once per outbox row.
-- **Back-pressure**: if Kafka is down, the outbox table buffers events until the dispatcher catches up.
-
-## Queries
-
-```
-GET /records/aggregations?startTime=&endTime=&type=
+```bash
+cp .env.example .env
+docker compose up --build
 ```
 
-Runs a single SQL statement:
+Services exposed:
 
-```sql
-SELECT destination_id,
-       jsonb_agg(jsonb_build_object(... ORDER BY time)) AS records,
-       SUM(CASE WHEN type = 'positive' THEN value ELSE -value END) AS total_value
-FROM records
-WHERE ($1 IS NULL OR time >= $1)
-  AND ($2 IS NULL OR time <= $2)
-  AND ($3 IS NULL OR type = $3)
-GROUP BY destination_id;
+| Service | Endpoint |
+|---------|----------|
+| API | http://localhost:8000/health |
+| Kafka broker | kafka:9092 (inside the network) |
+| PostgreSQL | localhost:5432 |
+
+### Development mode
+
+```bash
+docker compose -f docker-compose.dev.yaml up --build
 ```
 
-This satisfies the requirement to return all matching records and the summarized total per destination.
+The dev compose file bind-mounts the repository and enables auto-reload for the API; workers also run from source so edits apply immediately.
+
+## Example Usage
+
+### Submit a record
+
+```bash
+curl -X POST http://localhost:8000/records \
+  -H "Content-Type: application/json" \
+  -d '{
+    "recordId": "rec-001",
+    "time": "2024-03-01T12:00:00Z",
+    "sourceId": "source-a",
+    "destinationId": "dest-123",
+    "type": "positive",
+    "value": 125.50,
+    "unit": "SEK",
+    "reference": "invoice-9"
+  }'
+```
+
+### Query aggregations
+
+```bash
+curl "http://localhost:8000/records/aggregations?startTime=2024-03-01T00:00:00Z&type=positive"
+```
+
+### Observe notifications/alerts
+
+```bash
+docker compose exec kafka kafka-console-consumer \
+  --bootstrap-server kafka:9092 \
+  --topic notifications \
+  --from-beginning
+
+docker compose exec kafka kafka-console-consumer \
+  --bootstrap-server kafka:9092 \
+  --topic alerts \
+  --from-beginning
+```
+
+## Reliability Guarantees
+
+- **Idempotency**: `record_id` is the primary key, so duplicates are ignored.
+- **Atomicity**: record insert, aggregate update, and outbox writes happen in one transaction.
+- **Outbox pattern**: notifications and alerts are only published after they are safely stored; if Kafka is down, rows accumulate in the outbox and publish once the dispatcher catches up.
+- **Back-pressure**: the outbox table acts as the buffer, preventing record loss if Kafka is unavailable.
+
+## Next Steps
+
+- Add schema migrations
+- Add stress/load test
