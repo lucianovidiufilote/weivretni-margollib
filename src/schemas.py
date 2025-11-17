@@ -50,14 +50,6 @@ class RecordDTO(BaseModel):
     model_config = ConfigDict(populate_by_name=True, use_enum_values=True)
 
 
-class AggregationQueryParams(BaseModel):
-    """Query parameter container for aggregation endpoint."""
-
-    start_time: Optional[datetime] = Field(None, alias="startTime")
-    end_time: Optional[datetime] = Field(None, alias="endTime")
-    type: Optional[RecordType] = None
-
-
 class AggregationGroup(BaseModel):
     """Response element representing a destination group."""
 
@@ -67,10 +59,3 @@ class AggregationGroup(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-
-__all__ = [
-    "RecordPayload",
-    "RecordAcceptedResponse",
-    "RecordDTO",
-    "AggregationGroup",
-]
