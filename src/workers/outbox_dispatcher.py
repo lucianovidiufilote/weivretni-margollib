@@ -4,14 +4,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any
 
 from aiokafka import AIOKafkaProducer
-from sqlalchemy import text
 
 from src.config import get_settings
 from src.db import async_session_factory
+from src.services.outbox import fetch_pending_events, mark_event_published
 
 logger = logging.getLogger(__name__)
 
@@ -20,35 +18,17 @@ async def dispatch_once(producer: AIOKafkaProducer) -> bool:
     settings = get_settings()
     async with async_session_factory() as session:
         async with session.begin():
-            stmt = text(
-                """
-                SELECT id, destination, payload
-                FROM outbox
-                WHERE published_at IS NULL
-                ORDER BY created_at
-                LIMIT :limit
-                FOR UPDATE SKIP LOCKED
-                """
-            )
-            result = await session.execute(
-                stmt,
-                {"limit": settings.outbox_batch_size},
-            )
-            mapping_result = result.mappings()
-            rows = mapping_result.all()
+            rows = await fetch_pending_events(session, limit=settings.outbox_batch_size)
             if not rows:
                 return False
 
             for row in rows:
                 event_id = row["id"]
                 destination = row["destination"]
-                payload: Any = row["payload"]
+                payload = row["payload"]
                 await producer.send_and_wait(destination, payload)
+                await mark_event_published(session, event_id)
                 logger.info("Published outbox %s to %s", event_id, destination)
-                await session.execute(
-                    text("UPDATE outbox SET published_at = :published WHERE id = :id"),
-                    {"published": datetime.now(tz=timezone.utc), "id": event_id},
-                )
     return True
 
 

@@ -9,8 +9,9 @@ from sqlalchemy.dialects.postgresql import insert
 
 from src.config import get_settings
 from src.db import async_session_factory
-from src.models import Aggregate, OutboxEvent, Record, RecordType
+from src.models import Aggregate, Record, RecordType
 from src.schemas import RecordPayload
+from src.services.outbox import enqueue_outbox_event
 
 logger = logging.getLogger(__name__)
 
@@ -100,12 +101,11 @@ async def _process_payload(payload: RecordPayload) -> None:
                 "summary": summary,
             }
 
-            await session.execute(
-                insert(OutboxEvent).values(
-                    event_type="notification",
-                    destination=settings.notifications_topic,
-                    payload=notification_payload,
-                )
+            await enqueue_outbox_event(
+                session,
+                event_type="notification",
+                destination=settings.notifications_topic,
+                payload=notification_payload,
             )
 
             if payload.value >= settings.default_alert_threshold:
@@ -113,12 +113,11 @@ async def _process_payload(payload: RecordPayload) -> None:
                     "record": record_dict,
                     "threshold": float(settings.default_alert_threshold),
                 }
-                await session.execute(
-                    insert(OutboxEvent).values(
-                        event_type="alert",
-                        destination=settings.alerts_topic,
-                        payload=alert_payload,
-                    )
+                await enqueue_outbox_event(
+                    session,
+                    event_type="alert",
+                    destination=settings.alerts_topic,
+                    payload=alert_payload,
                 )
 
 
