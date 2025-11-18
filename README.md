@@ -270,6 +270,8 @@ The script wraps Autocannon and applies a constant request rate (`overallRate`) 
 `CONNECTIONS` defines how many concurrent clients Autocannon should maintain.  
 During the test the tool streams live stats and, once complete, prints the aggregate throughput/latency numbers so you can verify the service handles ~28 req/s (≈100k/hr) without errors.
 
+Results:  
+![img.png](img.png)
 
 
 ## Next Steps
