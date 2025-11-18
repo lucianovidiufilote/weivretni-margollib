@@ -43,15 +43,6 @@ class Aggregate(Base):
     last_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
-class Threshold(Base):
-    __tablename__ = "thresholds"
-
-    destination_id: Mapped[str | None] = mapped_column(String(64), primary_key=True)
-    reference: Mapped[str | None] = mapped_column(String(64), primary_key=True)
-    unit: Mapped[str] = mapped_column(String(16), primary_key=True)
-    threshold: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
-
-
 class OutboxEvent(Base):
     __tablename__ = "outbox"
 
