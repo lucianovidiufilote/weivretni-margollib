@@ -11,7 +11,7 @@
   - [Integrity and robustness requirements](#integrity-and-robustness-requirements)
   - [Functional stages](#functional-stages)
   - [Test plan](#test-plan)
-- [Implementation Guide](#implementation-guide)
+- [Implementation](#implementation)
   - [Architecture at a Glance](#architecture-at-a-glance)
   - [Components](#components)
   - [Runtime Workflow](#runtime-workflow)
