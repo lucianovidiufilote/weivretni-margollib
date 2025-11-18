@@ -260,9 +260,20 @@ docker compose exec kafka kafka-console-consumer \
 - Outbox worker → no missed notifications/alerts
 
 
+## Load testing
+To start:
+```shell
+RATE=28 DURATION=3600 CONNECTIONS=50 node loadtest/test.js
+```
+
+The script wraps Autocannon and applies a constant request rate (`overallRate`) for the entire duration.  
+`RATE` controls target requests per second.  
+`DURATION` is the number of seconds to keep the run active.  
+`CONNECTIONS` defines how many concurrent clients Autocannon should maintain.  
+During the test the tool streams live stats and, once complete, prints the aggregate throughput/latency numbers so you can verify the service handles ~28 req/s (≈100k/hr) without errors.
+
+
+
 ## Next Steps
 - Add schema migrations
 - Add unit/functional/integration tests
-
-## Load testing
-RATE=28 DURATION=3600 CONNECTIONS=50 node loadtest/test.js

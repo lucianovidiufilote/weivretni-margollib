@@ -21,7 +21,7 @@ const instance = autocannon({
   url: target,
   duration,
   connections,
-  amount: rate * duration,
+  overallRate: rate,
   headers: {
     'content-type': 'application/json'
   },
